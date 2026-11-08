@@ -60,12 +60,56 @@ if [ -f "$D/Poser.json" ]; then
   mkdir -p "$WF" && cp "$D/Poser.json" "$WF/Poser.json" && echo "[boot] Poser workflow installed"
 fi
 
-# ---- restart ComfyUI so it loads the new nodes (the same thing Manager's Restart button does) ----
+# ---- restart ComfyUI so it loads the new nodes, and VERIFY that it really did ----
+# Last time the Manager restart call did nothing and ComfyUI kept running with the old node list, while this script
+# still reported success. So now we check the real result: a node from the new packs (Krea2EditModelPatch) and the
+# res_2s sampler (RES4LYF) must show up in ComfyUI's own node list.
+nodes_loaded() {
+  curl -fs -m 15 http://127.0.0.1:8188/object_info/Krea2EditModelPatch 2>/dev/null | grep -q '"Krea2EditModelPatch"'     && curl -fs -m 15 http://127.0.0.1:8188/object_info/KSampler 2>/dev/null | grep -q 'res_2s'
+}
+wait_for_nodes() {   # wait up to $1 seconds for the new nodes to show up
+  local t=0
+  while [ "$t" -lt "$1" ]; do nodes_loaded && return 0; sleep 3; t=$((t+3)); done
+  return 1
+}
+restart_direct() {   # fallback: stop the running ComfyUI and start it again with the same command, folder and environment
+  local pid args=() envs=() cwd i
+  pid=$(pgrep -f 'main\.py.*8188' | head -1)
+  [ -n "$pid" ] || { echo "[boot] direct restart: no ComfyUI process found"; return 1; }
+  cwd=$(readlink "/proc/$pid/cwd") || return 1
+  mapfile -d '' -t args < "/proc/$pid/cmdline"
+  mapfile -d '' -t envs < "/proc/$pid/environ"
+  case "${args[0]:-}" in *python*) ;; *) echo "[boot] direct restart: unexpected command ${args[0]:-?}"; return 1;; esac
+  echo "[boot] direct restart: stopping pid $pid, starting again: ${args[*]}"
+  kill "$pid" 2>/dev/null
+  for i in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+  kill -9 "$pid" 2>/dev/null
+  ( cd "$cwd" && nohup setsid env -i "${envs[@]}" "${args[@]}" >> "$D/comfyui-restart.log" 2>&1 & )
+}
+
 stage running restarting "Restarting ComfyUI so it loads the new nodes"
-if ! curl -fs -m 10 http://127.0.0.1:8188/manager/reboot >/dev/null 2>&1; then
-  curl -fs -m 10 http://127.0.0.1:8188/api/manager/reboot >/dev/null 2>&1 || echo "[boot] could not ask Manager to restart; restart ComfyUI by hand"
+if nodes_loaded; then
+  echo "[boot] the new nodes are already loaded, no restart needed"
+else
+  # attempt 1: the same thing Manager's Restart button does
+  if ! curl -fs -m 10 http://127.0.0.1:8188/manager/reboot >/dev/null 2>&1; then
+    curl -fs -m 10 http://127.0.0.1:8188/api/manager/reboot >/dev/null 2>&1 || echo "[boot] Manager restart call failed"
+  fi
+  if wait_for_nodes 120; then
+    echo "[boot] ComfyUI restarted through Manager and the new nodes are loaded"
+  else
+    # attempt 2: restart it ourselves
+    echo "[boot] Manager restart did not load the new nodes, trying a direct restart"
+    stage running restarting "Restarting ComfyUI a second way"
+    restart_direct
+    if wait_for_nodes 180; then
+      echo "[boot] ComfyUI restarted directly and the new nodes are loaded"
+    else
+      echo "[boot] ComfyUI still does not show the new nodes"
+      echo "ComfyUI did not restart by itself. In ComfyUI click Manager, then Restart, then reload the page" >> "$D/failures.txt"
+    fi
+  fi
 fi
-sleep 10
 for i in $(seq 1 100); do comfy_up && break; sleep 3; done
 
 if [ -s "$D/failures.txt" ]; then
