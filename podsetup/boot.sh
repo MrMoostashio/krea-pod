@@ -27,7 +27,7 @@ stage() {
 stage running waiting "Waiting for ComfyUI to start"
 
 # ---- get the files ----
-for f in progress_server.py progress.html setup.sh Poser.json; do
+for f in progress_server.py progress.html setup.sh Poser.json Reference.json; do
   if [ -n "$SRC" ]; then
     cp "$SRC/$f" "$D/$f" || echo "[boot] could not copy $f"
   elif [ -n "$RAW" ]; then
@@ -56,9 +56,11 @@ bash "$D/setup.sh"
 
 # ---- put the Poser workflow into ComfyUI's workflow list ----
 WF="$COMFY/user/default/workflows"
-if [ -f "$D/Poser.json" ]; then
-  mkdir -p "$WF" && cp "$D/Poser.json" "$WF/Poser.json" && echo "[boot] Poser workflow installed"
-fi
+for W in Poser Reference; do
+  if [ -f "$D/$W.json" ]; then
+    mkdir -p "$WF" && cp "$D/$W.json" "$WF/$W.json" && echo "[boot] $W workflow installed"
+  fi
+done
 
 # ---- restart ComfyUI so it loads the new nodes, and VERIFY that it really did ----
 # Last time the Manager restart call did nothing and ComfyUI kept running with the old node list, while this script

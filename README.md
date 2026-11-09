@@ -12,6 +12,7 @@ There are no secrets in this repository. Your CivitAI key stays in your RunPod s
 - `podsetup/setup.sh` downloads the models and LoRAs and installs the node packs. **Edit the lists at the top to add or remove things.**
 - `podsetup/progress_server.py` and `podsetup/progress.html` are the progress page.
 - `podsetup/Poser.json` is the Poser workflow.
+- `podsetup/Reference.json` is the Reference workflow (a copy of Poser for making reference portraits and full-body photos). Both workflows are installed into ComfyUI's workflow list on every new pod.
 - `podsetup/entry.sh`, `Dockerfile` and `.github/workflows/build-image.yml` build the custom pod image (Option A below).
 
 ## Option A (fully automatic): a custom image that GitHub builds for you
