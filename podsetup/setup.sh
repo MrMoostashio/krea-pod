@@ -91,6 +91,38 @@ for p in "$COMFY"/.venv-cu*/bin/python "$COMFY/.venv/bin/python" "$COMFY/venv/bi
 done
 echo "Python: $PY"
 
+# ---- optional: character LoRAs from a PRIVATE Hugging Face repo ----
+# Set these as RunPod template environment variables / secrets (never put them in this repository):
+#   HF_TOKEN       a READ-ONLY Hugging Face token
+#   HF_LORA_REPO   the private model repo, as  name/repo
+#   HF_LORA_MATCH  optional regex on the file path, e.g. "jade" to fetch only Jade's checkpoints (default: every .safetensors in the repo)
+# If these are not set, this section does nothing.
+HF_ERR=""
+if [ -n "${HF_TOKEN:-}" ] && [ -n "${HF_LORA_REPO:-}" ]; then
+  echo "--- looking up LoRAs in the private Hugging Face repo ---"
+  HF_LIST=$(HF_TOKEN="$HF_TOKEN" HF_LORA_REPO="$HF_LORA_REPO" HF_LORA_MATCH="${HF_LORA_MATCH:-}" "$PY" - <<'PYEOF' 2>/dev/null
+import os, re, json, urllib.request
+repo = os.environ["HF_LORA_REPO"]; pat = os.environ.get("HF_LORA_MATCH") or "."
+req = urllib.request.Request("https://huggingface.co/api/models/%s/tree/main?recursive=true" % repo,
+                             headers={"Authorization": "Bearer " + os.environ["HF_TOKEN"]})
+items = json.load(urllib.request.urlopen(req, timeout=60))
+for it in items:
+    path = it.get("path", "")
+    if it.get("type") == "file" and path.endswith(".safetensors") and re.search(pat, path):
+        print("%s	%d" % (path, max(1, int(it.get("size", 0)) // 1048576)))
+PYEOF
+  ) || HF_LIST=""
+  if [ -z "$HF_LIST" ]; then
+    HF_ERR="Hugging Face LoRAs (no files found - check HF_TOKEN, HF_LORA_REPO and HF_LORA_MATCH)"
+    echo "note: $HF_ERR"
+  else
+    while IFS=$'	' read -r hfpath hfmb; do
+      [ -n "$hfpath" ] && MODELS+=("loras|$(basename "$hfpath")|hfprivate:${HF_LORA_REPO}::${hfpath}|${hfmb}")
+    done <<< "$HF_LIST"
+    echo "found $(echo "$HF_LIST" | wc -l) LoRA file(s) to download"
+  fi
+fi
+
 # ---- write the plan the progress page reads (which files and node packs to expect) ----
 rm -rf "$PODSETUP_DIR/nodes"; mkdir -p "$PODSETUP_DIR/nodes"
 plan='{"files":['; first=1
@@ -113,6 +145,7 @@ if ! command -v aria2c >/dev/null 2>&1; then
 fi
 
 FAILS="$PODSETUP_DIR/failures.txt"; : > "$FAILS"
+[ -n "${HF_ERR:-}" ] && echo "$HF_ERR" >> "$FAILS"
 
 dl_one() {
   local sub="$1" name="$2" src="$3"
@@ -135,6 +168,17 @@ dl_one() {
     if [ "$code" != "200" ]; then
       echo "[FAIL]  $name - CivitAI answered HTTP $code (try CIVITAI_HOST=civitai.red, or check the key)"
       rm -f "$tmp"; echo "$name (CivitAI HTTP $code)" >> "$FAILS"; return 1
+    fi
+  elif [[ "$src" == hfprivate:* ]]; then
+    if [ -z "${HF_TOKEN:-}" ]; then
+      echo "[SKIP]  $name - HF_TOKEN is not set"; echo "$name (no Hugging Face token)" >> "$FAILS"; return 1
+    fi
+    local spec="${src#hfprivate:}" hfrepo hfpath hfcode
+    hfrepo="${spec%%::*}"; hfpath="${spec#*::}"
+    hfcode=$(curl -sSL -H "Authorization: Bearer $HF_TOKEN" -o "$tmp" -w "%{http_code}" "https://huggingface.co/$hfrepo/resolve/main/$hfpath")
+    if [ "$hfcode" != "200" ]; then
+      echo "[FAIL]  $name - Hugging Face answered HTTP $hfcode (check the token and repo name)"
+      rm -f "$tmp"; echo "$name (Hugging Face HTTP $hfcode)" >> "$FAILS"; return 1
     fi
   else
     if command -v aria2c >/dev/null 2>&1; then
