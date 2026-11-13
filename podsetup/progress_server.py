@@ -16,13 +16,16 @@ PORT = int(os.environ.get("PROGRESS_PORT", "3000"))
 STARTED = time.time()
 
 LABELS = {
-    "diffusion_models": "Downloading the main Krea 2 model (the biggest file, so it takes the longest)",
+    "diffusion_models": "Downloading the main model (the biggest file, so it takes the longest)",
     "text_encoders": "Downloading the text encoder",
     "vae": "Downloading the VAE",
     "loras": "Downloading LoRAs",
     "upscale_models": "Downloading helper models",
     "ultralytics/bbox": "Downloading helper models",
     "sams": "Downloading helper models",
+    "clip_vision": "Downloading the image encoder",
+    "detection": "Downloading pose and face detection models",
+    "sam2": "Downloading helper models",
 }
 
 
@@ -64,7 +67,7 @@ def build_status():
         expected = int(f.get("mb", 0)) * 1024 * 1024
         p = f["path"]
         done_size, part_size = size(p), size(p + ".part")
-        if done_size > 1_000_000:
+        if done_size > 100_000:
             state, b = "done", expected
         elif part_size >= 0:
             state, b = "downloading", min(part_size, expected)
