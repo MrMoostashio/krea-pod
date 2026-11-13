@@ -1,0 +1,28 @@
+# Video pod image (POD_PROFILE=video): the same as the main image, plus the Wan 2.2 Animate node packs
+# and their Python packages already installed, so a new pod skips the ~12 minutes of node installs.
+# Built by GitHub (see .github/workflows/build-image.yml) as ghcr.io/<owner>/krea-lean-comfyui-video:latest
+FROM runpod/comfyui:1.7.0-comfyuiv0.35.0-cuda12.8
+
+# The node packs the "Motion Control GOD Edition" workflow needs (keep in sync with the video NODES list in setup.sh)
+ARG VIDEO_NODES="https://github.com/kijai/ComfyUI-WanVideoWrapper https://github.com/kijai/ComfyUI-WanAnimatePreprocess https://github.com/kijai/ComfyUI-segment-anything-2 https://github.com/kijai/ComfyUI-KJNodes https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite https://github.com/Fannovel16/ComfyUI-Frame-Interpolation https://github.com/yolain/ComfyUI-Easy-Use https://github.com/evanspearman/ComfyMath https://github.com/pythongosssss/ComfyUI-Custom-Scripts https://github.com/rgthree/rgthree-comfy"
+
+# Put the packs into the baked ComfyUI folder (copied to /workspace on first boot) and install their
+# Python packages into the image's system Python, which the pod's venv can see. torch stays pinned.
+RUN set -eux; \
+    cd /opt/comfyui-baked/custom_nodes; \
+    python3.12 -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/torch-pins.txt; \
+    cat /tmp/torch-pins.txt; \
+    for url in $VIDEO_NODES; do \
+      n=$(basename "$url"); \
+      [ -d "$n" ] || git clone --depth 1 -q "$url" "$n"; \
+      if [ -f "$n/requirements.txt" ]; then python3.12 -m pip install --no-cache-dir -c /tmp/torch-pins.txt -r "$n/requirements.txt"; fi; \
+      if [ -f "$n/install.py" ]; then (cd "$n" && python3.12 install.py) || echo "note: install.py of $n failed (not fatal)"; fi; \
+    done; \
+    python3.12 -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/torch-after.txt; \
+    diff /tmp/torch-pins.txt /tmp/torch-after.txt; \
+    touch /opt/comfyui-baked/.video-nodes-baked
+
+COPY podsetup/ /opt/podsetup/
+RUN chmod +x /opt/podsetup/*.sh
+
+ENTRYPOINT ["/opt/podsetup/entry.sh"]
