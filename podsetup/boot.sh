@@ -100,19 +100,19 @@ stage running restarting "Restarting ComfyUI so it loads the new nodes"
 if nodes_loaded; then
   echo "[boot] the new nodes are already loaded, no restart needed"
 else
-  # attempt 1: the same thing Manager's Restart button does
-  if ! curl -fs -m 10 http://127.0.0.1:8188/manager/reboot >/dev/null 2>&1; then
-    curl -fs -m 10 http://127.0.0.1:8188/api/manager/reboot >/dev/null 2>&1 || echo "[boot] Manager restart call failed"
-  fi
-  if wait_for_nodes 120; then
-    echo "[boot] ComfyUI restarted through Manager and the new nodes are loaded"
+  # attempt 1: restart it ourselves (Manager's restart call failed on every pod so far and cost 2 minutes of waiting)
+  restart_direct
+  if wait_for_nodes 180; then
+    echo "[boot] ComfyUI restarted directly and the new nodes are loaded"
   else
-    # attempt 2: restart it ourselves
-    echo "[boot] Manager restart did not load the new nodes, trying a direct restart"
+    # attempt 2: the same thing Manager's Restart button does
+    echo "[boot] direct restart did not load the new nodes, trying Manager's restart"
     stage running restarting "Restarting ComfyUI a second way"
-    restart_direct
-    if wait_for_nodes 180; then
-      echo "[boot] ComfyUI restarted directly and the new nodes are loaded"
+    if ! curl -fs -m 10 http://127.0.0.1:8188/manager/reboot >/dev/null 2>&1; then
+      curl -fs -m 10 http://127.0.0.1:8188/api/manager/reboot >/dev/null 2>&1 || echo "[boot] Manager restart call failed"
+    fi
+    if wait_for_nodes 120; then
+      echo "[boot] ComfyUI restarted through Manager and the new nodes are loaded"
     else
       echo "[boot] ComfyUI still does not show the new nodes"
       echo "ComfyUI did not restart by itself. In ComfyUI click Manager, then Restart, then reload the page" >> "$D/failures.txt"
