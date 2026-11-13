@@ -15,7 +15,8 @@ D="${PODSETUP_DIR:-/workspace/podsetup}"
 SRC="${PODSETUP_SRC:-}"           # folder that already holds the files (image mode); empty = download from GitHub
 RAW="${PODSETUP_RAW:-}"           # base address of the podsetup folder on GitHub (needed when SRC is empty)
 COMFY=/workspace/runpod-slim/ComfyUI
-export PODSETUP_DIR="$D" PODSETUP_UNDER_BOOT=1
+POD_PROFILE="${POD_PROFILE:-krea}"   # krea (default) or video; set in the RunPod template's environment variables
+export PODSETUP_DIR="$D" PODSETUP_UNDER_BOOT=1 POD_PROFILE
 
 mkdir -p "$D"
 echo "[boot] started $(date)"
@@ -57,6 +58,7 @@ bash "$D/setup.sh"
 # ---- put the Poser workflow into ComfyUI's workflow list ----
 WF="$COMFY/user/default/workflows"
 for W in Poser Reference; do
+  [ "$POD_PROFILE" = "krea" ] || break   # the video profile has no workflow files of ours: drag the workflow into the page
   if [ -f "$D/$W.json" ]; then
     mkdir -p "$WF" && cp "$D/$W.json" "$WF/$W.json" && echo "[boot] $W workflow installed"
   fi
@@ -67,7 +69,12 @@ done
 # still reported success. So now we check the real result: a node from the new packs (Krea2EditModelPatch) and the
 # res_2s sampler (RES4LYF) must show up in ComfyUI's own node list.
 nodes_loaded() {
-  curl -fs -m 15 http://127.0.0.1:8188/object_info/Krea2EditModelPatch 2>/dev/null | grep -q '"Krea2EditModelPatch"'     && curl -fs -m 15 http://127.0.0.1:8188/object_info/KSampler 2>/dev/null | grep -q 'res_2s'
+  if [ "$POD_PROFILE" = "video" ]; then
+    # a node from the Wan video pack and one from the pose pack must show up in ComfyUI's own node list
+    curl -fs -m 15 http://127.0.0.1:8188/object_info/WanVideoSampler 2>/dev/null | grep -q '"WanVideoSampler"'       && curl -fs -m 15 http://127.0.0.1:8188/object_info/PoseAndFaceDetection 2>/dev/null | grep -q '"PoseAndFaceDetection"'
+  else
+    curl -fs -m 15 http://127.0.0.1:8188/object_info/Krea2EditModelPatch 2>/dev/null | grep -q '"Krea2EditModelPatch"'     && curl -fs -m 15 http://127.0.0.1:8188/object_info/KSampler 2>/dev/null | grep -q 'res_2s'
+  fi
 }
 wait_for_nodes() {   # wait up to $1 seconds for the new nodes to show up
   local t=0
