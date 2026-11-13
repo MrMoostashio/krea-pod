@@ -262,6 +262,10 @@ echo "--- installing custom nodes ---"
 mkdir -p "$COMFY/custom_nodes"
 for url in "${NODES[@]}"; do
   n=$(basename "$url")
+  # the video image ships the packs pre-installed in /opt/comfyui-baked; copy instead of downloading
+  if [ ! -d "$COMFY/custom_nodes/$n" ] && [ -d "/opt/comfyui-baked/custom_nodes/$n" ]; then
+    cp -a "/opt/comfyui-baked/custom_nodes/$n" "$COMFY/custom_nodes/$n" && echo "[copy]  $n (pre-installed in the image)"
+  fi
   if [ ! -d "$COMFY/custom_nodes/$n" ]; then
     git clone --depth 1 -q "$url" "$COMFY/custom_nodes/$n" || { echo "[FAIL]  node pack $n"; echo "node pack $n (could not download)" >> "$FAILS"; continue; }
   fi
