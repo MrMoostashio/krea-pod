@@ -5,7 +5,8 @@
 #   - by hand: paste/run it in the pod's terminal (safe to run again; finished downloads are skipped)
 #   - automatically: boot.sh runs it and the progress page (port 3000) shows what it is doing
 #
-#  Needs (optional) env var CIVITAI_API_KEY for the 4 CivitAI LoRAs.
+#  POD_PROFILE=video (template env var) installs the Wan 2.2 Animate motion-control stack instead of the Krea 2 one.
+#  Needs (optional) env var CIVITAI_API_KEY for the 4 CivitAI LoRAs (krea profile only).
 #  The key is never printed or written to any file.
 # =====================================================================
 set -u
@@ -14,6 +15,7 @@ CIVITAI_HOST="${CIVITAI_HOST:-civitai.com}"   # if CivitAI downloads fail with 4
 UPDATE_COMFY="${UPDATE_COMFY:-1}"             # 1 = update ComfyUI first. 0 = leave it alone.
 MAXJOBS=4                                     # downloads running at the same time
 PODSETUP_DIR="${PODSETUP_DIR:-/workspace/podsetup}"   # progress information for the progress page lives here
+POD_PROFILE="${POD_PROFILE:-krea}"            # krea (default, the image workflows) or video (Wan 2.2 Animate motion control). Set it as a template environment variable.
 
 # ---------------------------------------------------------------------
 #  EDIT THESE LISTS TO ADD OR REMOVE THINGS
@@ -51,6 +53,46 @@ NODES=(
   "https://github.com/ltdrdata/ComfyUI-Impact-Subpack"
   "https://github.com/ClownsharkBatwing/RES4LYF"   # adds the res_2s sampler that the Poser/Dataset workflows use
 )
+
+# ---------------------------------------------------------------------
+#  VIDEO PROFILE (POD_PROFILE=video): replaces the two lists above.
+#  Everything the "Motion Control GOD Edition" workflow loads (Wan 2.2 Animate 14B). About 62 GB of models.
+#  The workflow file itself is NOT stored here: drag it into the ComfyUI page by hand.
+# ---------------------------------------------------------------------
+if [ "$POD_PROFILE" = "video" ]; then
+MODELS=(
+  "diffusion_models|wan2.2_animate_14B_bf16.safetensors|$HF/Comfy-Org/Wan-2.2/resolve/main/split_files/diffusion_models/wan2.2_animate_14B_bf16.safetensors|35400"
+  "text_encoders|umt5_xxl_fp16.safetensors|$HF/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp16.safetensors|11640"
+  "vae|Wan2_1_VAE_bf16.safetensors|$HF/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_bf16.safetensors|254"
+  "clip_vision|clip_vision_h.safetensors|$HF/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors|1290"
+  # --- pose, face and mask helpers ---
+  "detection|vitpose_h_wholebody_model.onnx|$HF/Kijai/vitpose_comfy/resolve/main/onnx/vitpose_h_wholebody_model.onnx|1"
+  "detection|vitpose_h_wholebody_data.bin|$HF/Kijai/vitpose_comfy/resolve/main/onnx/vitpose_h_wholebody_data.bin|2600"
+  "detection|yolov10m.onnx|$HF/Wan-AI/Wan2.2-Animate-14B/resolve/main/process_checkpoint/det/yolov10m.onnx|62"
+  "sam2|sam2.1_hiera_base_plus.safetensors|$HF/Kijai/sam2-safetensors/resolve/main/sam2.1_hiera_base_plus.safetensors|323"
+  # --- LoRAs used by the GOD workflow ---
+  "loras|wan2.2_animate_14B_relight_lora_bf16.safetensors|$HF/Comfy-Org/Wan-2.2/resolve/main/split_files/loras/wan2.2_animate_14B_relight_lora_bf16.safetensors|1470"
+  "loras|lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank256_bf16.safetensors|$HF/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank256_bf16.safetensors|2560"
+  "loras|wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors|$HF/Comfy-Org/Wan-2.2/resolve/main/split_files/loras/wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors|1260"
+  "loras|Wan21_PusaV1_LoRA_14B_rank512_bf16.safetensors|$HF/Kijai/WanVideo_comfy/resolve/main/Pusa/Wan21_PusaV1_LoRA_14B_rank512_bf16.safetensors|5030"
+  # The workflow asks for Wan2.2-Fun-A14B-InP-low-noise-MPS.safetensors, which is not on Hugging Face under that name.
+  # This is the closest public file (the Fun MPS reward LoRA, rank 22), saved under the name the workflow expects. It is a stand-in, not a verified copy.
+  "loras|Wan2.2-Fun-A14B-InP-low-noise-MPS.safetensors|$HF/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22_FunReward/Wan2.2-Fun-A14B-InP-LOW-MPS_resized_dynamic_avg_rank_22_bf16.safetensors|150"
+)
+# (rife49.pth is downloaded by the Frame-Interpolation node itself the first time it runs.)
+NODES=(
+  "https://github.com/kijai/ComfyUI-WanVideoWrapper"
+  "https://github.com/kijai/ComfyUI-WanAnimatePreprocess"
+  "https://github.com/kijai/ComfyUI-segment-anything-2"
+  "https://github.com/kijai/ComfyUI-KJNodes"
+  "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite"
+  "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation"
+  "https://github.com/yolain/ComfyUI-Easy-Use"
+  "https://github.com/evanspearman/ComfyMath"
+  "https://github.com/pythongosssss/ComfyUI-Custom-Scripts"
+  "https://github.com/rgthree/rgthree-comfy"
+)
+fi
 # ---------------------------------------------------------------------
 
 mkdir -p "$PODSETUP_DIR"
@@ -98,7 +140,7 @@ echo "Python: $PY"
 #   HF_LORA_MATCH  optional regex on the file path, e.g. "jade" to fetch only Jade's checkpoints (default: every .safetensors in the repo)
 # If these are not set, this section does nothing.
 HF_ERR=""
-if [ -n "${HF_TOKEN:-}" ] && [ -n "${HF_LORA_REPO:-}" ]; then
+if [ "$POD_PROFILE" = "krea" ] && [ -n "${HF_TOKEN:-}" ] && [ -n "${HF_LORA_REPO:-}" ]; then
   echo "--- looking up LoRAs in the private Hugging Face repo ---"
   HF_LIST=$(HF_TOKEN="$HF_TOKEN" HF_LORA_REPO="$HF_LORA_REPO" HF_LORA_MATCH="${HF_LORA_MATCH:-}" "$PY" - <<'PYEOF' 2>/dev/null
 import os, re, json, urllib.request
@@ -153,7 +195,7 @@ dl_one() {
   local out="$dir/$name"
   local tmp="$out.part"
   mkdir -p "$dir"
-  if [ -f "$out" ] && [ "$(stat -c%s "$out")" -gt 1000000 ]; then
+  if [ -f "$out" ] && [ "$(stat -c%s "$out")" -gt 100000 ]; then
     echo "[have]  $name"; return 0
   fi
   rm -f "$tmp"
@@ -187,7 +229,7 @@ dl_one() {
       curl -sSL --fail -o "$tmp" "$src" || { echo "[FAIL]  $name"; rm -f "$tmp"; echo "$name (download failed)" >> "$FAILS"; return 1; }
     fi
   fi
-  if [ ! -f "$tmp" ] || [ "$(stat -c%s "$tmp")" -lt 1000000 ]; then
+  if [ ! -f "$tmp" ] || [ "$(stat -c%s "$tmp")" -lt 100000 ]; then
     echo "[FAIL]  $name - file missing or too small"; rm -f "$tmp"; echo "$name (bad file)" >> "$FAILS"; return 1
   fi
   mv "$tmp" "$out"
