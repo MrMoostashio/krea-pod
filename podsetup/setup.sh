@@ -56,7 +56,7 @@ NODES=(
 
 # ---------------------------------------------------------------------
 #  VIDEO PROFILE (POD_PROFILE=video): replaces the two lists above.
-#  Everything the "Motion Control GOD Edition" workflow loads (Wan 2.2 Animate 14B). About 62 GB of models.
+#  Everything the "Motion Control GOD Edition" workflow loads (Wan 2.2 Animate 14B), plus SCAIL-2. About 83 GB of models.
 #  The workflow file itself is NOT stored here: drag it into the ComfyUI page by hand.
 # ---------------------------------------------------------------------
 if [ "$POD_PROFILE" = "video" ]; then
@@ -78,6 +78,12 @@ MODELS=(
   # The workflow asks for Wan2.2-Fun-A14B-InP-low-noise-MPS.safetensors, which is not on Hugging Face under that name.
   # This is the closest public file (the Fun MPS reward LoRA, rank 22), saved under the name the workflow expects. It is a stand-in, not a verified copy.
   "loras|Wan2.2-Fun-A14B-InP-low-noise-MPS.safetensors|$HF/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22_FunReward/Wan2.2-Fun-A14B-InP-LOW-MPS_resized_dynamic_avg_rank_22_bf16.safetensors|150"
+  # --- SCAIL-2 (official ComfyUI template "SCAIL-2", built-in nodes; added 2026-11-18 for the GOD vs SCAIL-2 test). ~21 GB.
+  #     fp8 model instead of the template's fp16; the template's umt5 fp8 text encoder is swapped for our umt5_xxl_fp16 in the page.
+  "diffusion_models|wan2.1_14B_SCAIL_2_fp8_scaled.safetensors|$HF/Comfy-Org/SCAIL-2/resolve/main/diffusion_models/wan2.1_14B_SCAIL_2_fp8_scaled.safetensors|17695"
+  "loras|wan2.1_SCAIL_2_DPO_lora_bf16.safetensors|$HF/Comfy-Org/SCAIL-2/resolve/main/loras/wan2.1_SCAIL_2_DPO_lora_bf16.safetensors|1227"
+  "loras|lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors|$HF/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors|738"
+  "checkpoints|sam3.1_multiplex_fp16.safetensors|$HF/Comfy-Org/sam3.1/resolve/main/checkpoints/sam3.1_multiplex_fp16.safetensors|1746"
 )
 # (rife49.pth is downloaded by the Frame-Interpolation node itself the first time it runs.)
 NODES=(
@@ -242,7 +248,13 @@ if [ "$UPDATE_COMFY" = "1" ] && [ -d "$COMFY/.git" ]; then
   echo "--- updating ComfyUI ---"
   # the template's ComfyUI checkout has no upstream set, so name the remote and the current branch explicitly
   BR=$(git -C "$COMFY" rev-parse --abbrev-ref HEAD 2>/dev/null)
-  git -C "$COMFY" pull --ff-only origin "${BR:-master}" || echo "note: ComfyUI update skipped (local changes or no network)"
+  if [ "$BR" = "HEAD" ] || [ -z "$BR" ]; then
+    # detached checkout (e.g. a release tag): move to the latest master so new built-in nodes (SCAIL-2, SAM3) exist
+    git -C "$COMFY" fetch -q origin master && git -C "$COMFY" checkout -q -B master origin/master || echo "note: ComfyUI update skipped (fetch/checkout failed)"
+  else
+    git -C "$COMFY" pull --ff-only origin "$BR" || echo "note: ComfyUI update skipped (local changes or no network)"
+  fi
+  echo "ComfyUI now at: $(git -C "$COMFY" log -1 --format='%h %cd' --date=short 2>/dev/null)"
   "$PY" -m pip install -q -r "$COMFY/requirements.txt" || echo "note: requirements install had a problem"
 fi
 
