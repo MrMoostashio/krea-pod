@@ -82,6 +82,7 @@ MODELS=(
   #     fp8 model instead of the template's fp16; the template's umt5 fp8 text encoder is swapped for our umt5_xxl_fp16 in the page.
   "diffusion_models|wan2.1_14B_SCAIL_2_fp8_scaled.safetensors|$HF/Comfy-Org/SCAIL-2/resolve/main/diffusion_models/wan2.1_14B_SCAIL_2_fp8_scaled.safetensors|17695"
   "loras|wan2.1_SCAIL_2_DPO_lora_bf16.safetensors|$HF/Comfy-Org/SCAIL-2/resolve/main/loras/wan2.1_SCAIL_2_DPO_lora_bf16.safetensors|1227"
+  "loras|wan2.1_SCAIL_2_relight_lora_bf16.safetensors|$HF/Comfy-Org/SCAIL-2/resolve/main/loras/wan2.1_SCAIL_2_relight_lora_bf16.safetensors|1227"
   "loras|lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors|$HF/Kijai/WanVideo_comfy/resolve/main/Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors|738"
   "checkpoints|sam3.1_multiplex_fp16.safetensors|$HF/Comfy-Org/sam3.1/resolve/main/checkpoints/sam3.1_multiplex_fp16.safetensors|1746"
 )
