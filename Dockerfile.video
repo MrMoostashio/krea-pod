@@ -22,6 +22,19 @@ RUN set -eux; \
     diff /tmp/torch-pins.txt /tmp/torch-after.txt; \
     touch /opt/comfyui-baked/.video-nodes-baked
 
+# Pose detection (WanAnimatePreprocess, ViTPose/YOLO .onnx) ran on the CPU (~6.5 min per 8 s clip) because only the
+# CPU onnxruntime was installed. Swap in the CUDA 12 build so it runs on the GPU. torch stays pinned; the cuDNN/cuBLAS
+# libraries come from torch's own nvidia-* pip packages (loaded by torch before ComfyUI creates the onnx session,
+# and also put on LD_LIBRARY_PATH below). The build fails if the CUDA provider is missing.
+RUN set -eux; \
+    python3.12 -m pip uninstall -y onnxruntime onnxruntime-gpu || true; \
+    python3.12 -m pip install --no-cache-dir -c /tmp/torch-pins.txt "onnxruntime-gpu>=1.20"; \
+    python3.12 -c "import onnxruntime as o; p=o.get_available_providers(); print(o.__version__, p); assert 'CUDAExecutionProvider' in p"; \
+    python3.12 -m pip freeze | grep -iE '^(torch|torchvision|torchaudio)==' > /tmp/torch-after2.txt; \
+    diff /tmp/torch-pins.txt /tmp/torch-after2.txt; \
+    python3.12 -c "import nvidia, os; print(os.path.dirname(nvidia.__path__[0]))" > /tmp/nv.txt; cat /tmp/nv.txt
+ENV LD_LIBRARY_PATH="/usr/local/lib/python3.12/dist-packages/nvidia/cudnn/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cufft/lib:/usr/local/lib/python3.12/dist-packages/nvidia/curand/lib:${LD_LIBRARY_PATH}"
+
 COPY podsetup/ /opt/podsetup/
 RUN chmod +x /opt/podsetup/*.sh
 
